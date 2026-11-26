@@ -1,0 +1,28 @@
+# Start:  docker compose up --build -d    then open http://localhost:8000
+# Stop:   docker compose down
+# Every value has a default, so a .env file is optional (see .env.example).
+name: spotter
+
+services:
+  app:
+    build: .
+    image: spotter:latest
+    ports:
+      # Reachable from this machine only: the local setup serves plain HTTP.
+      - "127.0.0.1:${APP_PORT:-8000}:8000"
+    environment:
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-3}
+      TRUCK_TIME_FACTOR: ${TRUCK_TIME_FACTOR:-1.15}
+      ROUTING_TIMEOUT: ${ROUTING_TIMEOUT:-25}
+      WEATHER_TIMEOUT: ${WEATHER_TIMEOUT:-25}
+      GEOCODING_TIMEOUT: ${GEOCODING_TIMEOUT:-8}
+      THROTTLE_ANON: ${THROTTLE_ANON:-240/min}
+      THROTTLE_HEAVY: ${THROTTLE_HEAVY:-20/min}
+      OSRM_URL: ${OSRM_URL:-https://router.project-osrm.org}
+      OPEN_METEO_URL: ${OPEN_METEO_URL:-https://api.open-meteo.com}
+      PHOTON_URL: ${PHOTON_URL:-https://photon.komoot.io}
+      UPSTREAM_USER_AGENT: ${UPSTREAM_USER_AGENT:-weather-aware-truck-routing/1.0}
+    restart: unless-stopped

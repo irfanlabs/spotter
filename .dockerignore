@@ -1,0 +1,14 @@
+**/node_modules
+**/.venv
+**/dist
+**/staticfiles
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.env
+**/.env.*
+**/.DS_Store
+backend/trips/tests
+backend/config/settings_test.py
+.git
+*.pdf
