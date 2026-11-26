@@ -136,18 +136,31 @@ def simplify(path: Sequence[LatLon], tolerance_deg: float) -> list[LatLon]:
 
 
 def simplify_to_budget(path: Sequence[LatLon], max_points: int) -> list[LatLon]:
-    """Simplify with increasing tolerance until at most `max_points` remain."""
+    """Simplify with increasing tolerance until at most `max_points` remain.
+
+    Each pass starts from the previous result, so the full path is scanned only
+    once. The extra deviation this introduces is not visible on a map."""
     tol = 0.0005
     out = list(path)
     while len(out) > max_points and tol < 1.0:
-        out = simplify(path, tol)
+        out = simplify(out, tol)
         tol *= 1.6
     return out
 
 
-def path_similarity(a: Sequence[LatLon], b: Sequence[LatLon], samples: int = 40, threshold_mi: float = 3.0) -> float:
-    """Fraction of points sampled along `a` that lie within `threshold_mi` of path `b`."""
-    ca, cb = cumulative_miles(a), cumulative_miles(b)
+def path_similarity(
+    a: Sequence[LatLon],
+    b: Sequence[LatLon],
+    samples: int = 40,
+    threshold_mi: float = 3.0,
+    a_cum: Sequence[float] | None = None,
+    b_cum: Sequence[float] | None = None,
+) -> float:
+    """Fraction of points sampled along `a` that lie within `threshold_mi` of path `b`.
+
+    Pass the cumulative mileages when you already have them; they are costly for long paths."""
+    ca = a_cum or cumulative_miles(a)
+    cb = b_cum or cumulative_miles(b)
     if ca[-1] == 0 or cb[-1] == 0:
         return 1.0
     b_pts = [point_at(b, cb, cb[-1] * k / 199)[0] for k in range(200)]

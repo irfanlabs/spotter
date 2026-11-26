@@ -206,7 +206,7 @@ export function TripForm({ busy, serverFieldErrors, onSubmit }: Props) {
       <button className="btn btn-primary btn-block" type="submit" disabled={loading}>
         {loading ? (
           <>
-            <span className="spinner" /> Analyzing weather…
+            <span className="spinner" /> Finding routes and weather…
           </>
         ) : (
           <>

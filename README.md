@@ -140,7 +140,7 @@ The heatmap is requested after the routes arrive, so a heatmap failure never blo
 
 ### Routes
 
-OSRM often returns only one or two alternatives. Spotter also requests "via" routes through points offset 14% and 26% of the straight-line distance to either side of the midpoint. A candidate is kept only if it is no more than 1.6 times the length of the fastest route and overlaps each chosen route by less than 80%. If fewer than three distinct routes exist, the app says so.
+OSRM often returns only one or two alternatives. When it returns fewer than three, Spotter requests "via" routes through points offset 14% and 26% of the straight-line distance to either side of the midpoint. It waits up to 20 seconds for these and continues with whatever has arrived. A candidate is kept only if it is no more than 1.6 times the length of the fastest route and overlaps each chosen route by less than 80%. If fewer than three distinct routes exist, the app says so.
 
 Routes are lettered A, B, C in the order generated (A is the fastest the router found) and listed in recommendation order.
 

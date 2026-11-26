@@ -32,6 +32,7 @@ def session() -> requests.Session:
     s = requests.Session()
     retry = Retry(
         total=2,
+        read=1,  # a second slow read is enough; more would outlast the browser's patience
         backoff_factor=0.6,
         status_forcelist=(500, 502, 503, 504),
         allowed_methods=frozenset({"GET"}),

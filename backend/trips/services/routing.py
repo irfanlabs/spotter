@@ -9,8 +9,9 @@ retrace an existing route or are absurdly long are discarded.
 from __future__ import annotations
 
 import logging
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, wait
 from dataclasses import dataclass
+from functools import cached_property
 
 from django.conf import settings
 
@@ -24,6 +25,8 @@ MAX_DETOUR_RATIO = 1.6  # reject candidates >60% longer than the fastest
 MIN_DISTINCTNESS = 0.80  # reject candidates overlapping an existing route by more than this
 VIA_OFFSET_FRACTIONS = (0.14, 0.26)
 TARGET_ROUTES = 3
+VIA_WORKERS = 2  # public routing servers throttle bursts of requests
+VIA_BUDGET_S = 20.0  # longest a response waits for extra route options
 
 
 @dataclass
@@ -31,6 +34,11 @@ class RawRoute:
     path: list[geo.LatLon]  # full-resolution geometry
     distance_mi: float
     duration_s: float  # provider (car) duration, before truck adjustment
+
+    @cached_property
+    def cum(self) -> list[float]:
+        """Cumulative miles along the path, computed once."""
+        return geo.cumulative_miles(self.path)
 
 
 def _osrm(coords: list[geo.LatLon], *, alternatives: bool) -> list[RawRoute]:
@@ -65,7 +73,10 @@ def _osrm(coords: list[geo.LatLon], *, alternatives: bool) -> list[RawRoute]:
 
 
 def _distinct(candidate: RawRoute, existing: list[RawRoute]) -> bool:
-    return all(geo.path_similarity(candidate.path, e.path) < MIN_DISTINCTNESS and geo.path_similarity(e.path, candidate.path) < MIN_DISTINCTNESS for e in existing)
+    def overlap(a: RawRoute, b: RawRoute) -> float:
+        return geo.path_similarity(a.path, b.path, a_cum=a.cum, b_cum=b.cum)
+
+    return all(overlap(candidate, e) < MIN_DISTINCTNESS and overlap(e, candidate) < MIN_DISTINCTNESS for e in existing)
 
 
 def _via_candidates(origin: geo.LatLon, dest: geo.LatLon) -> list[RawRoute]:
@@ -82,42 +93,39 @@ def _via_candidates(origin: geo.LatLon, dest: geo.LatLon) -> list[RawRoute]:
             logger.info("via candidate failed: %s", exc)
             return None
 
-    with ThreadPoolExecutor(max_workers=len(vias)) as pool:
-        return [r for r in pool.map(one, vias) if r]
+    pool = ThreadPoolExecutor(max_workers=VIA_WORKERS)
+    futures = [pool.submit(one, via) for via in vias]
+    done, pending = wait(futures, timeout=VIA_BUDGET_S)
+    # Extra options are a bonus: never hold the whole response for stragglers.
+    pool.shutdown(wait=False, cancel_futures=True)
+    if pending:
+        logger.warning("Skipped %d slow extra-route request(s) after %.0fs", len(pending), VIA_BUDGET_S)
+    return [route for f in futures if f in done and (route := f.result())]
 
 
 def generate_routes(origin: geo.LatLon, dest: geo.LatLon) -> list[RawRoute]:
     if geo.haversine_mi(origin, dest) < 0.2:
         raise NoRouteFound("Origin and destination are the same place.")
 
-    # The via candidates are requested concurrently with the base query so the
-    # extra round-trip is hidden; they are only used if OSRM's own alternatives
-    # fall short of three.
-    with ThreadPoolExecutor(max_workers=1) as pool:
-        via_future = pool.submit(_via_candidates, origin, dest)
-        try:
-            base = _osrm([origin, dest], alternatives=True)
-        except Exception:
-            via_future.cancel()
-            raise
-        if not base:
-            raise NoRouteFound()
-        base.sort(key=lambda r: r.duration_s)
-        fastest = base[0]
+    base = _osrm([origin, dest], alternatives=True)
+    if not base:
+        raise NoRouteFound()
+    base.sort(key=lambda r: r.duration_s)
+    fastest = base[0]
 
-        chosen: list[RawRoute] = [fastest]
-        for r in base[1:]:
-            if len(chosen) < TARGET_ROUTES and _distinct(r, chosen):
-                chosen.append(r)
+    chosen: list[RawRoute] = [fastest]
+    for r in base[1:]:
+        if len(chosen) < TARGET_ROUTES and _distinct(r, chosen):
+            chosen.append(r)
 
-        if len(chosen) < TARGET_ROUTES:
-            candidates = [c for c in via_future.result() if c.distance_mi <= fastest.distance_mi * MAX_DETOUR_RATIO]
-            candidates.sort(key=lambda r: r.duration_s)
-            for c in candidates:
-                if len(chosen) >= TARGET_ROUTES:
-                    break
-                if _distinct(c, chosen):
-                    chosen.append(c)
+    if len(chosen) < TARGET_ROUTES:
+        candidates = [c for c in _via_candidates(origin, dest) if c.distance_mi <= fastest.distance_mi * MAX_DETOUR_RATIO]
+        candidates.sort(key=lambda r: r.duration_s)
+        for c in candidates:
+            if len(chosen) >= TARGET_ROUTES:
+                break
+            if _distinct(c, chosen):
+                chosen.append(c)
 
     if len(chosen) < TARGET_ROUTES:
         logger.info("Only %d distinct route(s) available", len(chosen))

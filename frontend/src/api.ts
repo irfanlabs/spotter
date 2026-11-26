@@ -61,7 +61,7 @@ export const searchPlaces = (q: string, signal?: AbortSignal, strict = false) =>
   request<{ results: Place[] }>(`/geocode?q=${encodeURIComponent(q)}${strict ? "&strict=1" : ""}`, { signal, timeoutMs: 12_000 });
 
 export const analyze = (body: AnalyzeRequest, signal?: AbortSignal) =>
-  request<AnalysisResult>("/analyze", { method: "POST", body: JSON.stringify(body), signal, timeoutMs: 90_000 });
+  request<AnalysisResult>("/analyze", { method: "POST", body: JSON.stringify(body), signal, timeoutMs: 120_000 });
 
 export const fetchHeatmap = (geometries: string[], departure: string, load_weight_lb: number, signal?: AbortSignal) =>
   request<HeatmapResult>("/heatmap", {

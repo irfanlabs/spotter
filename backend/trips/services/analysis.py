@@ -74,7 +74,7 @@ def analyze(origin: Place, destination: Place, departure: datetime, load_lb: flo
 
     prepared = []
     for idx, raw in enumerate(raw_routes):
-        cum = geo.cumulative_miles(raw.path)
+        cum = raw.cum
         scale = raw.distance_mi / cum[-1] if cum[-1] else 1.0
         duration_s = raw.duration_s * settings.TRUCK_TIME_FACTOR
         # Report the spacing actually used: very long routes are capped and widened.
